@@ -1,0 +1,594 @@
+openapi: 3.1.0
+info:
+  title: Moodle Consultas Read-Only API
+  version: 2.0.0
+  description: >
+    Action para GPT consultar dados do Moodle por meio de um proxy read-only hospedado no Supabase.
+    O token fixo do Moodle fica no servidor do proxy, nunca no schema da Action.
+    Autentique-se com sua chave de API (Bearer token) obtida em frontend/index.html.
+servers:
+  - url: https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/moodle-proxy
+    description: Proxy Moodle hospedado no Supabase Edge Functions
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Verificar se o proxy está ativo
+      responses:
+        "200":
+          description: Status do proxy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /courses:
+    get:
+      operationId: listCoursesByField
+      summary: Consultar cursos por campo ou listar cursos visíveis
+      description: >
+        Usa core_course_get_courses_by_field. Sem field/value, retorna cursos visíveis ao token.
+      parameters:
+        - in: query
+          name: field
+          schema:
+            type: string
+            enum: ["", "id", "ids", "shortname", "idnumber", "category"]
+          required: false
+          description: Campo para filtro. Use vazio para listar cursos disponíveis ao token.
+        - in: query
+          name: value
+          schema:
+            type: string
+          required: false
+          description: Valor do campo. Para ids, use IDs separados por vírgula.
+      responses:
+        "200":
+          description: Lista de cursos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /courses/search:
+    get:
+      operationId: searchCourses
+      summary: Pesquisar cursos por texto
+      description: Usa core_course_search_courses com criterianame=search.
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+          required: true
+          description: Texto para buscar no nome/resumo do curso.
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 0
+          required: false
+        - in: query
+          name: perPage
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          required: false
+        - in: query
+          name: limitToEnrolled
+          schema:
+            type: boolean
+            default: false
+          required: false
+      responses:
+        "200":
+          description: Resultado da busca de cursos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /courses/{courseId}/contents:
+    get:
+      operationId: getCourseContents
+      summary: Consultar conteúdos, seções e módulos de um curso
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+      responses:
+        "200":
+          description: Conteúdos do curso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /courses/{courseId}/students:
+    get:
+      operationId: getCourseStudents
+      summary: Consultar alunos/participantes de um curso com últimos acessos
+      description: >
+        Usa core_enrol_get_enrolled_users. Retorna campos como id, nome, email,
+        firstaccess, lastaccess e lastcourseaccess quando a permissão do token permitir.
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+        - in: query
+          name: onlyActive
+          schema:
+            type: boolean
+            default: true
+          required: false
+        - in: query
+          name: limitFrom
+          schema:
+            type: integer
+            default: 0
+          required: false
+        - in: query
+          name: limitNumber
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+          required: false
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: ["id", "firstname", "lastname", "siteorder"]
+            default: "lastname"
+          required: false
+        - in: query
+          name: sortDirection
+          schema:
+            type: string
+            enum: ["ASC", "DESC"]
+            default: "ASC"
+          required: false
+      responses:
+        "200":
+          description: Participantes do curso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/search:
+    get:
+      operationId: searchUsers
+      summary: Pesquisar usuários/alunos por critério
+      description: Usa core_user_get_users com um único critério.
+      parameters:
+        - in: query
+          name: key
+          required: true
+          schema:
+            type: string
+            enum: ["id", "lastname", "firstname", "idnumber", "username", "email", "auth"]
+        - in: query
+          name: value
+          required: true
+          schema:
+            type: string
+          description: Valor do critério. Em alguns campos o Moodle aceita % para busca parcial.
+      responses:
+        "200":
+          description: Usuários encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/by-field:
+    get:
+      operationId: getUsersByField
+      summary: Consultar usuários por campo único
+      description: Usa core_user_get_users_by_field para id, idnumber, username ou email.
+      parameters:
+        - in: query
+          name: field
+          required: true
+          schema:
+            type: string
+            enum: ["id", "idnumber", "username", "email"]
+        - in: query
+          name: values
+          required: true
+          schema:
+            type: string
+          description: Um ou mais valores separados por vírgula.
+      responses:
+        "200":
+          description: Usuários encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/{userId}/courses:
+    get:
+      operationId: getUserCourses
+      summary: Consultar cursos de um aluno/usuário
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID do usuário/aluno no Moodle.
+        - in: query
+          name: returnUserCount
+          schema:
+            type: boolean
+            default: false
+          required: false
+      responses:
+        "200":
+          description: Cursos do usuário
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/{userId}/last-access:
+    get:
+      operationId: getUserLastAccess
+      summary: Consultar últimos acessos do aluno
+      description: >
+        Sem courseId, consulta cursos do aluno e retorna lastaccess por curso quando disponível.
+        Com courseId, consulta participantes do curso e filtra o usuário para obter lastcourseaccess.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID do usuário/aluno no Moodle.
+        - in: query
+          name: courseId
+          schema:
+            type: integer
+          required: false
+      responses:
+        "200":
+          description: Últimos acessos disponíveis para o usuário
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/{userId}/courses/{courseId}/grades:
+    get:
+      operationId: getStudentGrades
+      summary: Consultar notas de um aluno em um curso
+      description: Usa gradereport_user_get_grade_items.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID do usuário/aluno no Moodle.
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+      responses:
+        "200":
+          description: Notas do aluno no curso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/{userId}/courses/{courseId}/completion:
+    get:
+      operationId: getStudentCompletion
+      summary: Consultar status de conclusão das atividades de um aluno em um curso
+      description: Usa core_completion_get_activities_completion_status.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID do usuário/aluno no Moodle.
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+      responses:
+        "200":
+          description: Status de conclusão
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /users/{userId}/courses/{courseId}/pending-activities:
+    get:
+      operationId: getStudentPendingActivities
+      summary: Consultar atividades pendentes de um aluno em um curso
+      description: >
+        Relatório composto. Combina status de conclusão, conteúdos do curso e tarefas para listar
+        atividades incompletas/pendentes visíveis ao usuário do token.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID do usuário/aluno no Moodle.
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+        - in: query
+          name: includeUntracked
+          schema:
+            type: boolean
+            default: false
+          required: false
+          description: Se true, inclui módulos sem rastreamento de conclusão quando encontrados no conteúdo.
+      responses:
+        "200":
+          description: Atividades pendentes do aluno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /assignments/course/{courseId}:
+    get:
+      operationId: getCourseAssignments
+      summary: Consultar tarefas/atividades avaliativas de um curso
+      description: Usa mod_assign_get_assignments.
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+      responses:
+        "200":
+          description: Tarefas do curso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /assignments/{assignmentId}/submissions:
+    get:
+      operationId: getAssignmentSubmissions
+      summary: Consultar entregas/submissões de uma tarefa
+      description: Usa mod_assign_get_submissions.
+      parameters:
+        - in: path
+          name: assignmentId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+          description: Filtro opcional do Moodle, por exemplo submitted.
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix inicial.
+        - in: query
+          name: before
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix final.
+      responses:
+        "200":
+          description: Submissões da tarefa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /assignments/{assignmentId}/grades:
+    get:
+      operationId: getAssignmentGrades
+      summary: Consultar notas de uma tarefa
+      description: Usa mod_assign_get_grades.
+      parameters:
+        - in: path
+          name: assignmentId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix inicial para notas modificadas.
+      responses:
+        "200":
+          description: Notas da tarefa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /reports/pending-grading:
+    get:
+      operationId: reportPendingGrading
+      summary: Gerar relatório de entregas pendentes de correção
+      description: >
+        Relatório composto: busca tarefas do curso, submissões e notas; lista entregas submetidas
+        que parecem não corrigidas, conforme gradingstatus/ausência de nota.
+      parameters:
+        - in: query
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix inicial para submissões.
+        - in: query
+          name: before
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix final para submissões.
+        - in: query
+          name: limitAssignments
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Relatório de pendências de correção
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /reports/pending-delivery:
+    get:
+      operationId: reportPendingDelivery
+      summary: Gerar relatório de atividades pendentes de entrega
+      description: >
+        Relatório composto: identifica tarefas com prazo no período e participantes sem submissão enviada.
+      parameters:
+        - in: query
+          name: courseId
+          required: true
+          schema:
+            type: integer
+          description: ID do curso no Moodle.
+        - in: query
+          name: dueFrom
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix inicial do prazo.
+        - in: query
+          name: dueTo
+          required: false
+          schema:
+            type: integer
+          description: Timestamp Unix final do prazo. Se omitido, usa o momento atual.
+        - in: query
+          name: onlyActive
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - in: query
+          name: limitStudents
+          required: false
+          schema:
+            type: integer
+            default: 500
+            maximum: 1000
+        - in: query
+          name: limitAssignments
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Relatório de pendências de entrega
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+  /reports/configurable/{reportId}:
+    get:
+      operationId: getConfigurableReport
+      summary: Consultar relatório configurável do Moodle
+      description: Usa block_configurable_reports_get_report_data quando o plugin estiver disponível.
+      parameters:
+        - in: path
+          name: reportId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: courseId
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dados do relatório configurável
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodleResult"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Chave de API gerada no cadastro (frontend/index.html).
+        Não é o token do Moodle — é a chave pessoal do usuário para autenticar no proxy.
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        service:
+          type: string
+        readOnly:
+          type: boolean
+    MoodleResult:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        source:
+          type: string
+        data:
+          description: Dados brutos ou processados retornados do Moodle/proxy.
+        warnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        generatedAt:
+          type: string
+          format: date-time
