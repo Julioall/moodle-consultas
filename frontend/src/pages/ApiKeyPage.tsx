@@ -1,71 +1,104 @@
-import { useState } from 'react';
-import { ApiError } from '../lib/api-client';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useEffect, useState } from 'react';
+import { ApiError, ApiKeyRecord, getCurrentApiKey, regenerateApiKey } from '../lib/api-client';
 
 export function ApiKeyPage() {
-  const { refreshSession, session } = useAuth();
+  const [key, setKey] = useState<ApiKeyRecord | null>(null);
+  const [generatedKey, setGeneratedKey] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
-  const [validationStatus, setValidationStatus] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    getCurrentApiKey()
+      .then((currentKey) => {
+        if (active) setKey(currentKey);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof ApiError ? err.message : 'Não foi possível carregar a chave.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleCopy() {
-    if (!session?.apiKey) return;
-    await navigator.clipboard.writeText(session.apiKey);
+    if (!generatedKey) return;
+    await navigator.clipboard.writeText(generatedKey);
     setCopyStatus('Chave completa copiada.');
   }
 
-  async function handleValidate() {
-    setValidationStatus('');
-    setIsValidating(true);
+  async function handleRegenerate() {
+    setError('');
+    setCopyStatus('');
+    setGeneratedKey('');
+    setIsRegenerating(true);
     try {
-      await refreshSession(true);
-      setValidationStatus('Sessão validada com sucesso no Moodle.');
+      const result = await regenerateApiKey();
+      setKey(result.key);
+      setGeneratedKey(result.apiKey);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Não foi possível validar a sessão.';
-      setValidationStatus(message);
+      setError(err instanceof ApiError ? err.message : 'Não foi possível regenerar a chave.');
     } finally {
-      setIsValidating(false);
+      setIsRegenerating(false);
     }
   }
 
   return (
     <section className="card-panel">
       <span className="section-label">Chave de API</span>
-      <h2>Sua credencial da conta</h2>
-      <p className="hero-text">A chave identifica sua conta e será usada como Bearer token na autenticação das Actions.</p>
+      <h2>Sua credencial para GPT Actions</h2>
+      <p className="hero-text">A chave identifica sua conta nas Actions. O banco salva apenas o hash; a chave completa aparece somente ao gerar ou regenerar.</p>
+
+      {isLoading ? <div className="alert">Carregando chave...</div> : null}
+      {error ? <div className="alert alert-error">{error}</div> : null}
 
       <div className="api-key-box">
-        <code>{session?.keyPreview}</code>
+        <code>{key?.keyPreview ?? 'Nenhuma chave criada'}</code>
       </div>
 
       <div className="session-grid">
         <article className="feature-box">
-          <strong>Modo Moodle</strong>
-          <p>{session?.session?.mode === 'user' ? 'Usuário validado' : 'Token técnico'}</p>
+          <strong>Status</strong>
+          <p>{key ? 'Criada' : 'Pendente'}</p>
         </article>
         <article className="feature-box">
-          <strong>Usuário</strong>
-          <p>{session?.moodleUser?.fullname || session?.moodleUser?.username || 'Não informado'}</p>
+          <strong>Criada em</strong>
+          <p>{key?.createdAt ?? 'Ainda não gerada'}</p>
         </article>
         <article className="feature-box">
-          <strong>Expiração</strong>
-          <p>{session?.session?.expiresAt || session?.session?.sessionExpiresAt || 'Sem expiração local definida'}</p>
+          <strong>Último uso</strong>
+          <p>{key?.lastUsedAt ?? 'Sem uso registrado'}</p>
         </article>
       </div>
 
+      {generatedKey ? (
+        <div className="one-time-key">
+          <span className="section-label">Exibição única</span>
+          <p>Copie esta chave agora. Ela não poderá ser recuperada depois que você sair desta tela.</p>
+          <code>{generatedKey}</code>
+        </div>
+      ) : null}
+
       <div className="button-row compact">
-        <button className="button" type="button" onClick={handleCopy}>
-          Copiar chave
+        <button className="button" type="button" onClick={handleRegenerate} disabled={isRegenerating}>
+          {isRegenerating ? 'Gerando...' : key ? 'Regenerar chave' : 'Gerar chave'}
         </button>
-        <button className="button button-secondary" type="button" onClick={handleValidate} disabled={isValidating}>
-          {isValidating ? 'Validando...' : 'Validar sessão'}
+        <button className="button button-secondary" type="button" onClick={handleCopy} disabled={!generatedKey}>
+          Copiar chave completa
         </button>
       </div>
 
       {copyStatus ? <div className="alert alert-success">{copyStatus}</div> : null}
-      {validationStatus ? <div className="alert">{validationStatus}</div> : null}
 
-      <div className="callout">Boa prática: a chave de API identifica sua conta. Não compartilhe publicamente.</div>
+      <div className="callout">Boa prática: a chave de API identifica sua conta. Não compartilhe publicamente. Caso seja exposta, gere uma nova imediatamente.</div>
     </section>
   );
 }

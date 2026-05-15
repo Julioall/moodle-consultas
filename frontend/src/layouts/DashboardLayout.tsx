@@ -11,11 +11,11 @@ const menuItems = [
 ];
 
 export function DashboardLayout() {
-  const { logout, session } = useAuth();
+  const { logout, profile, user } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate('/login', { replace: true });
   }
 
@@ -25,7 +25,7 @@ export function DashboardLayout() {
         <div>
           <div className="brand">Central de Actions</div>
           <p className="brand-subtitle">
-            {session?.moodleUser?.fullname || session?.name || 'Painel para serviços ativos e schemas prontos.'}
+            {profile?.name || user?.email || 'Painel para serviços ativos e schemas prontos.'}
           </p>
         </div>
 

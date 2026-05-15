@@ -7,6 +7,7 @@ import { DashboardHomePage } from './pages/DashboardHomePage';
 import { HelpPage } from './pages/HelpPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
+import { MoodleServicePage } from './pages/MoodleServicePage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { YamlSchemaPage } from './pages/YamlSchemaPage';
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHomePage />} />
           <Route path="services" element={<ServicesPage />} />
+          <Route path="services/moodle" element={<MoodleServicePage />} />
           <Route path="api-key" element={<ApiKeyPage />} />
           <Route path="yaml" element={<YamlSchemaPage />} />
           <Route path="help" element={<HelpPage />} />

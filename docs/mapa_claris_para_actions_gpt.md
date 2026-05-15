@@ -2,6 +2,8 @@
 
 Atualizado em `2026-05-14`.
 
+Nota de atualização em `2026-05-15`: este documento descreve parte do cenário legado com token técnico fixo. O MVP atual usa Supabase Auth para a plataforma, `platform-api` para o dashboard, API keys `gah_live_*` salvas somente por hash e tokens Moodle por usuário cifrados após ativação do serviço.
+
 Este documento mapeia os caminhos, funcoes e capacidades da Claris que devem servir de referencia para evoluir o repositorio `Julioall/moodle-consultas.git`.
 
 Objetivo: permitir que o `moodle-consultas` seja usado por GPT Actions como ponto de consulta e, em fases controladas, como camada operacional com habilidades parecidas com a Claris: consultar Moodle, resumir contexto academico, identificar riscos, criar tarefas, consultar agenda, preparar mensagens, confirmar envios somente quando houver canal autorizado e registrar auditoria.

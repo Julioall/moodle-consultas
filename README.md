@@ -23,10 +23,11 @@ Sistemas de origem
 supabase/
   functions/
     moodle-proxy/index.ts   # proxy principal — rotas read-only do Moodle
-    register/index.ts       # endpoint de cadastro e geração de chave de API
+    platform-api/index.ts   # API do dashboard — auth, serviços, API keys e schemas
   migrations/
     0001_create_api_keys.sql
     0002_create_moodle_user_sessions.sql
+    0003_platform_actions_mvp.sql
 frontend/
   index.html                # entrada do app React + Vite
   src/                      # Home, Login, Register, Dashboard, Services, API Key, YAML e Help
@@ -46,19 +47,38 @@ docs/
 | `/register` | Cadastro |
 | `/dashboard` | Visão geral do painel |
 | `/dashboard/services` | Serviços disponíveis |
+| `/dashboard/services/moodle` | Ativação e configuração do Moodle |
 | `/dashboard/api-key` | Chave de API |
 | `/dashboard/yaml` | Schema YAML / OpenAPI |
 | `/dashboard/help` | Ajuda guiada |
 
 ## Autenticação do MVP
 
-O cadastro do frontend chama a Edge Function `register`, valida o usuário/senha do Moodle, cria uma chave de API no Supabase e salva a sessão local do painel no navegador.
+O cadastro e login da plataforma usam Supabase Auth com e-mail e senha.
 
-O login do painel é feito pela chave de API: o frontend chama `/session` no `moodle-proxy` com `Authorization: Bearer <chave>` e só libera o dashboard se o backend confirmar a chave.
+O dashboard chama a Edge Function `platform-api` usando o JWT Supabase da sessão. Por ela o usuário consulta serviços, ativa/desativa Moodle, gera API key e obtém o YAML.
 
-Este MVP ainda não usa senha própria de conta via Supabase Auth. A credencial real do painel é a chave de API emitida pelo backend.
+A API key das GPT Actions é separada do login da plataforma. Ela usa o formato `gah_live_*`, é salva apenas como HMAC-SHA-256 no banco e a chave completa aparece somente ao gerar/regenerar.
+
+API keys legadas em texto não autenticam mais.
 
 ## Rotas do backend
+
+### `platform-api`
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/auth/me` | Perfil da conta autenticada |
+| GET | `/services` | Serviços disponíveis com status do usuário |
+| GET | `/services/{slug}` | Detalhe de um serviço |
+| POST | `/services/{slug}/activate` | Ativar serviço; Moodle exige usuário/senha Moodle |
+| POST | `/services/{slug}/deactivate` | Desativar serviço |
+| GET | `/api-keys/current` | Preview da chave de API ativa |
+| POST | `/api-keys/regenerate` | Revoga a chave anterior e retorna uma nova chave completa uma única vez |
+| GET | `/schemas` | Schemas disponíveis |
+| GET | `/schemas/{serviceSlug}.yaml` | Schema YAML do serviço |
+
+### `moodle-proxy`
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
@@ -102,17 +122,25 @@ No painel do Supabase: **Project Settings → Edge Functions → Secrets**.
 
 | Secret | Descrição |
 |--------|-----------|
+| `API_KEY_HASH_SECRET` | Segredo forte para HMAC-SHA-256 das API keys `gah_live_*` |
 | `MOODLE_BASE_URL` | URL base do Moodle, ex: `https://ead.exemplo.com.br` |
-| `MOODLE_TOKEN` | Token do Web Service Moodle |
 | `MOODLE_SERVICE_NAME` | Nome curto do serviço de webservice usado para gerar token por usuário no `login/token.php` |
 | `MOODLE_SESSION_SECRET` | Segredo forte para cifrar tokens Moodle por usuário no banco |
 | `MOODLE_SESSION_TTL_SECONDS` | TTL local da sessão Moodle por usuário, opcional; padrão 43200 segundos |
+| `MOODLE_OPENAPI_SCHEMA_URL` | URL pública do schema YAML, opcional |
 
 `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são injetados automaticamente.
 
+No GitHub Actions, configure também:
+
+| Secret | Descrição |
+|--------|-----------|
+| `SUPABASE_ACCESS_TOKEN` | Token para deploy de Edge Functions e aplicação das migrations via Management API |
+| `SUPABASE_ANON_KEY` | Chave pública anon/publishable usada no build do frontend para Supabase Auth |
+
 ## Projeto Supabase ativo
 
-- **Projeto:** `scrzziyuruzzhebpzvdl` (Moodle Consultas Proxy, us-east-1)
+- **Projeto:** `scrzziyuruzzhebpzvdl`
 - **Proxy URL:** `https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/moodle-proxy`
-- **Registro:** `https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/register`
+- **Dashboard API:** `https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/platform-api`
 - **Frontend:** `https://julioall.github.io/moodle-consultas/`

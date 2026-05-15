@@ -1,4 +1,4 @@
-export type ServiceStatus = 'active' | 'inactive' | 'coming_soon';
+export type ServiceStatus = 'available' | 'active' | 'inactive' | 'coming_soon' | 'error';
 
 export type ServiceCard = {
   name: string;
@@ -33,7 +33,7 @@ export const services: ServiceCard[] = [
     name: 'Moodle',
     slug: 'moodle',
     description: 'Consulte cursos, alunos, atividades e informações acadêmicas via Actions em GPTs personalizados.',
-    status: 'active',
+    status: 'available',
     tags: ['MVP', 'Read-only', 'Pronto para uso'],
   },
   {

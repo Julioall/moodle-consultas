@@ -11,7 +11,7 @@ export function ProtectedRoute() {
         <section className="card-panel">
           <span className="section-label">Sessão</span>
           <h2>Validando acesso</h2>
-          <p className="hero-text">Estamos conferindo sua chave de API antes de abrir o painel.</p>
+          <p className="hero-text">Estamos conferindo sua sessão Supabase antes de abrir o painel.</p>
         </section>
       </div>
     );

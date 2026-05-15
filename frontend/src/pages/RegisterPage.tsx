@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { ApiError } from '../lib/api-client';
 
@@ -8,24 +8,29 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [moodleUsername, setMoodleUsername] = useState('');
-  const [moodlePassword, setMoodlePassword] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+    setSuccess('');
 
-    if (!name.trim() || !email.trim() || !moodleUsername.trim() || !moodlePassword) {
-      setError('Preencha nome, e-mail, usuário Moodle e senha Moodle.');
+    if (!name.trim() || !email.trim() || password.length < 6) {
+      setError('Preencha nome, e-mail e uma senha com pelo menos 6 caracteres.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await register({ name, email, moodleUsername, moodlePassword });
-      navigate('/dashboard/api-key', { replace: true });
+      const result = await register({ name, email, password });
+      if (result.requiresEmailConfirmation) {
+        setSuccess('Conta criada. Confirme seu e-mail antes de entrar.');
+        return;
+      }
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Não foi possível criar sua conta.';
       setError(message);
@@ -38,7 +43,7 @@ export function RegisterPage() {
     <section className="form-panel narrow-panel">
       <span className="eyebrow">Cadastro</span>
       <h1>Criar conta</h1>
-      <p className="hero-text">O cadastro valida seu acesso ao Moodle, cria sua chave de API e ativa o serviço no painel.</p>
+      <p className="hero-text">Crie sua conta da plataforma. A ativação do Moodle e a geração da API key acontecem no dashboard.</p>
 
       <form className="form-grid" onSubmit={handleSubmit}>
         <label>
@@ -52,28 +57,22 @@ export function RegisterPage() {
         </label>
 
         <label>
-          Usuário Moodle
-          <input
-            type="text"
-            autoComplete="username"
-            placeholder="Seu login no Moodle"
-            value={moodleUsername}
-            onChange={(event) => setMoodleUsername(event.target.value)}
-          />
-        </label>
-
-        <label>
-          Senha Moodle
+          Senha
           <input
             type="password"
-            autoComplete="current-password"
-            placeholder="Sua senha do Moodle"
-            value={moodlePassword}
-            onChange={(event) => setMoodlePassword(event.target.value)}
+            autoComplete="new-password"
+            placeholder="Mínimo de 6 caracteres"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
           />
         </label>
 
         {error ? <div className="alert alert-error">{error}</div> : null}
+        {success ? (
+          <div className="alert alert-success">
+            {success} <Link to="/login">Ir para login</Link>
+          </div>
+        ) : null}
 
         <button className="button" type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Criando conta...' : 'Criar conta'}

@@ -1,11 +1,18 @@
 openapi: 3.1.0
 info:
   title: Moodle Consultas Read-Only API
-  version: 2.0.0
+  version: 2.1.0
   description: >
     Action para GPT consultar dados do Moodle por meio de um proxy read-only hospedado no Supabase.
-    O token fixo do Moodle fica no servidor do proxy, nunca no schema da Action.
-    Autentique-se com sua chave de API (Bearer token) obtida no painel do GPT Actions Hub.
+    O Moodle precisa estar ativo no painel do GPT Actions Hub, e o token Moodle do usuário
+    fica cifrado no backend. Autentique-se com sua chave de API pessoal no formato
+    gah_live_* usando Bearer token.
+x-action-auth:
+  apiKeyFormat: gah_live_*
+  inactiveServiceStatus: 403
+  inactiveServiceError: service_inactive
+  invalidKeyStatus: 401
+  invalidKeyError: unauthorized
 servers:
   - url: https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/moodle-proxy
     description: Proxy Moodle hospedado no Supabase Edge Functions
@@ -29,7 +36,7 @@ paths:
       operationId: getMoodleSession
       summary: Consultar a sessão Moodle vinculada à chave de API
       description: >
-        Retorna se a chave está operando com token técnico ou com sessão Moodle de usuário.
+        Retorna a sessão Moodle de usuário vinculada à conta da chave de API.
         Use validate=true para validar o token de usuário chamando core_webservice_get_site_info.
         O token Moodle nunca é retornado.
       parameters:
@@ -47,6 +54,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MoodleResult"
+        "401":
+          description: Chave de API inválida, revogada ou expirada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Serviço Moodle inativo para a conta da chave de API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /courses:
     get:
@@ -639,7 +658,7 @@ paths:
       description: >
         Relatório composto que cruza último acesso, nota percentual do curso quando disponível
         e, opcionalmente, conclusão de atividades. O resultado é inferido pelos critérios
-        informados e depende das permissões do token técnico do Moodle.
+        informados e depende das permissões da sessão Moodle ativa do usuário.
       parameters:
         - in: query
           name: courseIds
@@ -831,7 +850,7 @@ components:
       type: http
       scheme: bearer
       description: >
-        Chave de API gerada no cadastro do GPT Actions Hub.
+        Chave de API gah_live_* gerada no painel do GPT Actions Hub.
         Não é o token do Moodle — é a chave pessoal do usuário para autenticar no proxy.
   schemas:
     HealthResponse:
@@ -843,6 +862,21 @@ components:
           type: string
         readOnly:
           type: boolean
+    ErrorResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+          const: false
+        error:
+          type: string
+          examples:
+            - unauthorized
+            - service_inactive
+            - moodle_session_required
+        message:
+          type: string
     MoodleResult:
       type: object
       additionalProperties: true

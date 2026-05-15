@@ -20,8 +20,8 @@ Encarregado pelo tratamento de dados pessoais, quando aplicavel: **[preencher no
 
 Esta Politica de Privacidade explica como o projeto `moodle-consultas` trata dados pessoais nos seguintes componentes:
 
-- pagina de cadastro para geracao de chave de API;
-- Edge Function `register`, responsavel pelo cadastro e emissao da chave;
+- cadastro e login da plataforma via Supabase Auth;
+- Edge Function `platform-api`, responsavel pelo painel, ativacao de servicos e emissao de chave;
 - Edge Function `moodle-proxy`, responsavel por validar a chave de API e consultar o Moodle;
 - schema OpenAPI usado para configurar GPT Actions.
 
@@ -31,11 +31,12 @@ Esta politica nao substitui a politica de privacidade do Moodle, do ChatGPT/Open
 
 ### 3.1 Dados de cadastro para obtencao da chave de API
 
-Quando um usuario solicita uma chave de API, tratamos:
+Quando um usuario cria conta e solicita uma chave de API, tratamos:
 
 - nome completo;
 - e-mail;
-- chave de API gerada para autenticacao;
+- hash da chave de API gerada para autenticacao;
+- preview parcial da chave de API;
 - status da chave, como ativa ou inativa;
 - data e hora de criacao do cadastro.
 
@@ -43,7 +44,7 @@ Quando um usuario solicita uma chave de API, tratamos:
 
 Durante o uso da API, podemos tratar:
 
-- chave de API enviada como Bearer token;
+- chave de API enviada como Bearer token, validada por hash;
 - data e hora das requisicoes;
 - rota consultada e parametros informados, como IDs de curso, IDs de usuario, e-mails, usernames, idnumbers ou termos de busca;
 - mensagens de erro e metadados tecnicos necessarios para seguranca, diagnostico e operacao;
@@ -51,7 +52,7 @@ Durante o uso da API, podemos tratar:
 
 ### 3.3 Dados academicos consultados no Moodle
 
-O proxy pode retornar dados disponiveis no Moodle conforme as permissoes do token tecnico configurado pela instituicao. Dependendo da rota consultada e das permissoes existentes, esses dados podem incluir:
+O proxy pode retornar dados disponiveis no Moodle conforme as permissoes da sessao Moodle ativa do usuario que ativou o servico. Dependendo da rota consultada e das permissoes existentes, esses dados podem incluir:
 
 - dados de cursos, turmas, secoes, conteudos e atividades;
 - dados de participantes ou alunos, como ID Moodle, username, nome, sobrenome, nome completo, e-mail, idnumber, papeis no curso e datas de primeiro ou ultimo acesso;
@@ -98,11 +99,11 @@ Os dados podem ser compartilhados ou acessados nos seguintes contextos:
 - com equipes internas autorizadas, como tecnologia, gestao academica, coordenacao, tutoria, seguranca da informacao, auditoria ou suporte;
 - com autoridades publicas, quando houver obrigacao legal ou ordem valida.
 
-O token tecnico do Moodle, a service role key do Supabase e outros segredos operacionais nao devem ser expostos no schema OpenAPI, no frontend, em respostas da API, em prompts ou em logs publicos.
+Tokens Moodle cifrados, a service role key do Supabase, o segredo de hash das API keys e outros segredos operacionais nao devem ser expostos no schema OpenAPI, no frontend, em respostas da API, em prompts ou em logs publicos.
 
 ## 7. Armazenamento e retencao
 
-Os dados de cadastro da chave de API sao armazenados no Supabase, na tabela `api_keys`, enquanto forem necessarios para autenticar o usuario, manter auditoria operacional, cumprir obrigacoes aplicaveis ou preservar a seguranca do servico.
+Os dados da chave de API sao armazenados no Supabase, na tabela `api_keys`, enquanto forem necessarios para autenticar o usuario, manter auditoria operacional, cumprir obrigacoes aplicaveis ou preservar a seguranca do servico. A chave completa nao e persistida.
 
 Os dados academicos consultados no Moodle sao retornados sob demanda pelo proxy. O projeto, no estado atual, nao foi desenhado para manter uma copia propria permanente desses dados academicos fora do Moodle, salvo registros tecnicos, logs de infraestrutura ou futuras funcionalidades explicitamente documentadas.
 
@@ -114,10 +115,10 @@ Adotamos medidas tecnicas e organizacionais proporcionais ao risco, incluindo:
 
 - autenticacao por chave de API enviada como Bearer token;
 - validacao da chave ativa no Supabase antes das consultas protegidas;
-- armazenamento do token tecnico do Moodle e de chaves de servico como secrets de backend;
+- armazenamento de tokens Moodle cifrados e chaves de servico como secrets de backend;
 - limitacao das funcoes Moodle permitidas a operacoes de leitura;
 - uso de RLS na tabela de chaves de API, com acesso operacional via service role nas Edge Functions;
-- controle de permissoes conforme o token tecnico configurado no Moodle;
+- controle de permissoes conforme a sessao Moodle ativa do usuario;
 - recomendacao de nao inserir senhas, tokens ou segredos em conversas, prompts, arquivos OpenAPI ou parametros visiveis.
 
 Nenhum sistema e completamente imune a riscos. Em caso de incidente de seguranca que possa gerar risco ou dano relevante aos titulares, o controlador devera avaliar as medidas cabiveis, inclusive comunicacoes aos titulares e a Autoridade Nacional de Protecao de Dados, quando exigido.
@@ -146,7 +147,7 @@ O `moodle-consultas` permite que uma GPT Action consulte dados do Moodle por mei
 - dados pessoais nao devem ser solicitados ou exibidos alem do necessario;
 - o GPT nao deve receber senhas, tokens Moodle, service role keys ou outros segredos;
 - respostas geradas por IA devem ser conferidas quando forem usadas para decisoes academicas, administrativas ou institucionais relevantes;
-- o proxy nao deve ser usado para prometer contexto de "usuario Moodle logado" quando a consulta ocorrer por token tecnico institucional.
+- o proxy nao deve ser usado para prometer dados que a sessao Moodle ativa do usuario nao consiga consultar.
 
 O uso do ChatGPT/OpenAI pode envolver tratamento de dados pela propria OpenAI conforme as configuracoes da conta, termos aplicaveis e politicas do servico utilizado.
 

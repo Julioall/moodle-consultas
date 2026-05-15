@@ -3,8 +3,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const API_KEY_HASH_SECRET = Deno.env.get("API_KEY_HASH_SECRET") ?? "";
 const MOODLE_BASE_URL = (Deno.env.get("MOODLE_BASE_URL") ?? "").replace(/\/$/, "");
-const MOODLE_TOKEN = Deno.env.get("MOODLE_TOKEN") ?? "";
 const MOODLE_SESSION_SECRET = Deno.env.get("MOODLE_SESSION_SECRET") ?? "";
 const MOODLE_TIMEOUT_MS = 8000;
 
@@ -33,7 +33,10 @@ const READ_ONLY_FUNCTIONS = new Set([
 
 interface AuthContext {
   apiKeyId: string;
-  moodleMode: "technical" | "user";
+  userId?: string | null;
+  serviceId?: string | null;
+  userServiceId?: string | null;
+  moodleMode: "user";
   moodleToken: string;
   moodleUserId?: number | null;
   moodleUsername?: string | null;
@@ -121,6 +124,30 @@ function fromBase64(value: string): Uint8Array {
   return bytes;
 }
 
+function toHex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function hmacSha256(value: string): Promise<string> {
+  if (!API_KEY_HASH_SECRET) {
+    throw Object.assign(new Error("API_KEY_HASH_SECRET precisa estar configurado."), {
+      status: 500,
+      error: "hash_secret_missing",
+    });
+  }
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(API_KEY_HASH_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return toHex(await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(value)));
+}
+
 async function getSessionCryptoKey(): Promise<CryptoKey> {
   if (!MOODLE_SESSION_SECRET) {
     throw Object.assign(new Error("MOODLE_SESSION_SECRET precisa estar configurado para usar sessões Moodle por usuário."), { status: 500 });
@@ -166,9 +193,9 @@ function appendParam(body: URLSearchParams, key: string, value: unknown): void {
 }
 
 async function moodleCall(wsfunction: string, params: Record<string, unknown> = {}, auth?: AuthContext): Promise<unknown> {
-  const token = auth?.moodleToken || MOODLE_TOKEN;
+  const token = auth?.moodleToken;
   if (!MOODLE_BASE_URL || !token) {
-    throw Object.assign(new Error("MOODLE_BASE_URL e um token Moodle precisam estar configurados para a Edge Function."), { status: 500 });
+    throw Object.assign(new Error("MOODLE_BASE_URL e uma sessão Moodle ativa precisam estar configurados."), { status: 500 });
   }
   if (!READ_ONLY_FUNCTIONS.has(wsfunction)) {
     throw Object.assign(new Error(`Função Moodle não permitida no proxy read-only: ${wsfunction}`), { status: 403 });
@@ -771,52 +798,107 @@ async function validateApiKey(req: Request): Promise<AuthContext | null> {
   if (!header.startsWith("Bearer ")) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
+  if (!token.startsWith("gah_live_")) return null;
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { data, error } = await supabase
+  const keyHash = await hmacSha256(token);
+
+  const { data: apiKey, error } = await supabase
     .from("api_keys")
-    .select("id")
-    .eq("api_key", token)
+    .select("id, user_id")
+    .eq("key_hash", keyHash)
     .eq("active", true)
+    .is("revoked_at", null)
     .maybeSingle();
 
-  if (error || data === null) return null;
+  if (error || apiKey === null) return null;
+
+  const { data: service, error: serviceError } = await supabase
+    .from("services")
+    .select("id, name, slug, status")
+    .eq("slug", "moodle")
+    .maybeSingle();
+
+  if (serviceError || !service || service.status !== "available") {
+    throw Object.assign(new Error("Serviço Moodle indisponível."), {
+      status: 403,
+      error: "service_unavailable",
+    });
+  }
+
+  const { data: userService, error: userServiceError } = await supabase
+    .from("user_services")
+    .select("id, status")
+    .eq("user_id", apiKey.user_id)
+    .eq("service_id", service.id)
+    .maybeSingle();
+
+  if (userServiceError) {
+    throw Object.assign(new Error("Erro ao validar serviço ativo."), {
+      status: 500,
+      error: "service_validation_error",
+    });
+  }
+
+  if (!userService || userService.status !== "active") {
+    throw Object.assign(new Error("Serviço Moodle não está ativo para esta conta."), {
+      status: 403,
+      error: "service_inactive",
+    });
+  }
 
   const { data: session, error: sessionError } = await supabase
     .from("moodle_user_sessions")
     .select("id, moodle_user_id, moodle_username, moodle_fullname, service_name, token_ciphertext, token_iv, expires_at")
-    .eq("api_key_id", data.id)
+    .eq("user_id", apiKey.user_id)
+    .eq("service_id", service.id)
+    .eq("user_service_id", userService.id)
     .eq("active", true)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (!sessionError && session) {
-    const expiresAt = session.expires_at ? new Date(String(session.expires_at)) : null;
-    if (expiresAt && expiresAt.getTime() <= Date.now()) {
-      throw Object.assign(new Error("Sessão Moodle expirada. Gere uma nova chave ou revalide o login Moodle."), {
-        status: 401,
-        error: "moodle_session_expired",
-      });
-    }
-    const moodleToken = await decryptToken(String(session.token_ciphertext), String(session.token_iv));
-    return {
-      apiKeyId: data.id,
-      moodleMode: "user",
-      moodleToken,
-      moodleUserId: session.moodle_user_id === null ? null : Number(session.moodle_user_id),
-      moodleUsername: session.moodle_username,
-      moodleFullname: session.moodle_fullname,
-      serviceName: session.service_name,
-      sessionId: session.id,
-      sessionExpiresAt: session.expires_at,
-    };
+  if (sessionError) {
+    throw Object.assign(new Error("Erro ao consultar sessão Moodle."), {
+      status: 500,
+      error: "moodle_session_lookup_error",
+    });
   }
 
+  if (!session) {
+    throw Object.assign(new Error("Serviço Moodle ativo, mas sem sessão Moodle válida. Reative o serviço."), {
+      status: 403,
+      error: "moodle_session_required",
+    });
+  }
+
+  const expiresAt = session.expires_at ? new Date(String(session.expires_at)) : null;
+  if (expiresAt && expiresAt.getTime() <= Date.now()) {
+    throw Object.assign(new Error("Sessão Moodle expirada. Reative o serviço Moodle no painel."), {
+      status: 401,
+      error: "moodle_session_expired",
+    });
+  }
+
+  const moodleToken = await decryptToken(String(session.token_ciphertext), String(session.token_iv));
+  await supabase
+    .from("api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", apiKey.id);
+
   return {
-    apiKeyId: data.id,
-    moodleMode: "technical",
-    moodleToken: MOODLE_TOKEN,
+    apiKeyId: apiKey.id,
+    userId: apiKey.user_id,
+    serviceId: service.id,
+    userServiceId: userService.id,
+    moodleMode: "user",
+    moodleToken,
+    moodleUserId: session.moodle_user_id === null ? null : Number(session.moodle_user_id),
+    moodleUsername: session.moodle_username,
+    moodleFullname: session.moodle_fullname,
+    serviceName: session.service_name,
+    sessionId: session.id,
+    sessionExpiresAt: session.expires_at,
   };
 }
 
@@ -832,7 +914,7 @@ GET("/health", async () =>
   jsonResp(200, {
     ok: true, service: "moodle-consultas-readonly-proxy", readOnly: true,
     moodleBaseUrlConfigured: Boolean(MOODLE_BASE_URL),
-    moodleTokenConfigured: Boolean(MOODLE_TOKEN),
+    apiKeyHashSecretConfigured: Boolean(API_KEY_HASH_SECRET),
   })
 );
 
@@ -1202,8 +1284,8 @@ Deno.serve(async (req: Request) => {
 
     let auth: AuthContext = {
       apiKeyId: "",
-      moodleMode: "technical",
-      moodleToken: MOODLE_TOKEN,
+      moodleMode: "user",
+      moodleToken: "",
     };
     if (path !== "/health") {
       try {

@@ -1,16 +1,62 @@
-const functionsBaseUrl = (
-  import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL ??
-  'https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1'
-).replace(/\/$/, '');
+import { functionsBaseUrl, supabase } from './supabase';
 
-export const registerUrl = `${functionsBaseUrl}/register`;
+export const platformApiUrl = `${functionsBaseUrl}/platform-api`;
 export const moodleProxyUrl = `${functionsBaseUrl}/moodle-proxy`;
 
 export type RegisterInput = {
   name: string;
   email: string;
-  moodleUsername: string;
-  moodlePassword: string;
+  password: string;
+};
+
+export type LoginInput = {
+  email: string;
+  password: string;
+};
+
+export type Profile = {
+  id: string;
+  name: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformUser = {
+  id: string;
+  email?: string;
+};
+
+export type ServiceStatus = 'available' | 'active' | 'inactive' | 'coming_soon' | 'error';
+
+export type PlatformService = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  catalogStatus: 'available' | 'coming_soon' | 'error';
+  status: ServiceStatus;
+  activatedAt: string | null;
+  deactivatedAt: string | null;
+  errorMessage: string | null;
+  moodleSession?: MoodleSession | null;
+};
+
+export type MoodleSession = {
+  id?: string;
+  mode?: 'user';
+  serviceName?: string | null;
+  expiresAt?: string | null;
+  sessionExpiresAt?: string | null;
+  usingUserToken?: boolean;
+  moodleUserId?: number | null;
+  moodleUsername?: string | null;
+  moodleFullname?: string | null;
+  moodle_user_id?: number | null;
+  moodle_username?: string | null;
+  moodle_fullname?: string | null;
+  service_name?: string | null;
+  expires_at?: string | null;
 };
 
 export type MoodleUser = {
@@ -20,28 +66,20 @@ export type MoodleUser = {
   siteurl?: string | null;
 };
 
-export type MoodleSession = {
-  mode: 'user' | 'technical';
-  serviceName: string | null;
-  expiresAt?: string | null;
-  sessionExpiresAt?: string | null;
-  usingUserToken?: boolean;
-  moodleUserId?: number | null;
-  moodleUsername?: string | null;
-  moodleFullname?: string | null;
+export type ApiKeyRecord = {
+  id: string;
+  keyPreview: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 };
 
-export type RegisterResponse = {
-  ok: true;
-  api_key: string;
-  moodle_user: MoodleUser;
-  session: MoodleSession;
-  message: string;
-};
-
-type ProxySessionResponse = {
-  ok: true;
-  data: MoodleSession;
+export type SchemaRecord = {
+  serviceSlug: string;
+  serviceName: string;
+  format: 'yaml' | 'json';
+  version: string | null;
+  url: string;
+  available: boolean;
 };
 
 type ErrorResponse = {
@@ -79,32 +117,100 @@ function extractError(response: Response, data: unknown): ApiError {
   return new ApiError(response.status, body.error || 'request_failed', message);
 }
 
-export async function registerAccount(input: RegisterInput): Promise<RegisterResponse> {
-  const response = await fetch(registerUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  const data = await parseJson(response);
-
-  if (!response.ok) {
-    throw extractError(response, data);
+async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) {
+    throw new ApiError(401, 'unauthorized', 'Sessão expirada. Faça login novamente.');
   }
-
-  return data as RegisterResponse;
+  return token;
 }
 
-export async function validateApiKey(apiKey: string, validateMoodleSession = false): Promise<MoodleSession> {
-  const response = await fetch(`${moodleProxyUrl}/session?validate=${validateMoodleSession ? 'true' : 'false'}`, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
-  const data = await parseJson(response);
+async function platformJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await getAccessToken();
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
+  const response = await fetch(`${platformApiUrl}${path}`, { ...init, headers });
+  const data = await parseJson(response);
   if (!response.ok) {
     throw extractError(response, data);
   }
+  return data as T;
+}
 
-  return (data as ProxySessionResponse).data;
+export async function fetchPlatformText(path: string): Promise<string> {
+  const token = await getAccessToken();
+  const response = await fetch(`${platformApiUrl}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const data = await parseJson(response);
+    throw extractError(response, data);
+  }
+
+  return response.text();
+}
+
+export async function getMe(): Promise<{ ok: true; user: PlatformUser; profile: Profile }> {
+  return platformJson('/auth/me');
+}
+
+export async function listServices(): Promise<PlatformService[]> {
+  const response = await platformJson<{ ok: true; services: PlatformService[] }>('/services');
+  return response.services;
+}
+
+export async function getService(slug: string): Promise<PlatformService> {
+  const response = await platformJson<{ ok: true; service: PlatformService }>(`/services/${slug}`);
+  return response.service;
+}
+
+export async function activateService(
+  slug: string,
+  input: { moodleUsername: string; moodlePassword: string },
+): Promise<{ service: PlatformService; moodleUser: MoodleUser; session: MoodleSession }> {
+  const response = await platformJson<{
+    ok: true;
+    service: PlatformService;
+    moodleUser: MoodleUser;
+    session: MoodleSession;
+  }>(`/services/${slug}/activate`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return response;
+}
+
+export async function deactivateService(slug: string): Promise<PlatformService> {
+  const response = await platformJson<{ ok: true; service: PlatformService }>(`/services/${slug}/deactivate`, {
+    method: 'POST',
+  });
+  return response.service;
+}
+
+export async function getCurrentApiKey(): Promise<ApiKeyRecord | null> {
+  const response = await platformJson<{ ok: true; key: ApiKeyRecord | null }>('/api-keys/current');
+  return response.key;
+}
+
+export async function regenerateApiKey(): Promise<{ apiKey: string; key: ApiKeyRecord; message: string }> {
+  const response = await platformJson<{ ok: true; apiKey: string; key: ApiKeyRecord; message: string }>(
+    '/api-keys/regenerate',
+    { method: 'POST' },
+  );
+  return response;
+}
+
+export async function listSchemas(): Promise<SchemaRecord[]> {
+  const response = await platformJson<{ ok: true; schemas: SchemaRecord[] }>('/schemas');
+  return response.schemas;
+}
+
+export async function getSchemaYaml(serviceSlug: string): Promise<string> {
+  return fetchPlatformText(`/schemas/${serviceSlug}.yaml`);
 }
