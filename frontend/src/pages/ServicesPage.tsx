@@ -1,6 +1,9 @@
 import { services } from '../data/platform';
+import { useAuth } from '../features/auth/AuthProvider';
 
 export function ServicesPage() {
+  const { session } = useAuth();
+
   return (
     <section className="card-panel">
       <div className="section-heading">
@@ -18,7 +21,9 @@ export function ServicesPage() {
                 <h3>{service.name}</h3>
                 <p>{service.description}</p>
               </div>
-              <span className="status-pill">{service.status === 'active' ? 'Ativo' : 'Em breve'}</span>
+              <span className="status-pill">
+                {service.slug === 'moodle' && session?.session ? 'Ativo' : service.status === 'active' ? 'Disponível' : 'Em breve'}
+              </span>
             </div>
 
             <div className="tag-row">
@@ -30,8 +35,8 @@ export function ServicesPage() {
             </div>
 
             <div className="button-row compact">
-              <button className="button" type="button">
-                Ativar serviço
+              <button className="button" type="button" disabled={service.slug !== 'moodle'}>
+                {service.slug === 'moodle' && session?.session ? 'Serviço ativo' : 'Ativar serviço'}
               </button>
               <button className="button button-secondary" type="button">
                 Ver endpoints

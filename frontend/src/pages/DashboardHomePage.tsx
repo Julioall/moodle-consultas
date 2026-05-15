@@ -1,7 +1,15 @@
 import { Link } from 'react-router-dom';
-import { dashboardStats } from '../data/platform';
+import { useAuth } from '../features/auth/AuthProvider';
 
 export function DashboardHomePage() {
+  const { session } = useAuth();
+  const dashboardStats = [
+    { label: 'Serviços ativos', value: session?.session ? '1' : '0' },
+    { label: 'Chave de API', value: session?.keyPreview ?? 'Não criada' },
+    { label: 'Schemas disponíveis', value: '1' },
+    { label: 'Sessão Moodle', value: session?.session?.mode === 'user' ? 'Usuário' : 'Técnica' },
+  ];
+
   return (
     <div className="stack-large">
       <section className="content-grid four-columns">

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { PublicLayout } from './layouts/PublicLayout';
 import { ApiKeyPage } from './pages/ApiKeyPage';
@@ -19,12 +20,14 @@ export default function App() {
         <Route path="register" element={<RegisterPage />} />
       </Route>
 
-      <Route path="dashboard" element={<DashboardLayout />}>
-        <Route index element={<DashboardHomePage />} />
-        <Route path="services" element={<ServicesPage />} />
-        <Route path="api-key" element={<ApiKeyPage />} />
-        <Route path="yaml" element={<YamlSchemaPage />} />
-        <Route path="help" element={<HelpPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="dashboard" element={<DashboardLayout />}>
+          <Route index element={<DashboardHomePage />} />
+          <Route path="services" element={<ServicesPage />} />
+          <Route path="api-key" element={<ApiKeyPage />} />
+          <Route path="yaml" element={<YamlSchemaPage />} />
+          <Route path="help" element={<HelpPage />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

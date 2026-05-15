@@ -50,6 +50,14 @@ docs/
 | `/dashboard/yaml` | Schema YAML / OpenAPI |
 | `/dashboard/help` | Ajuda guiada |
 
+## Autenticação do MVP
+
+O cadastro do frontend chama a Edge Function `register`, valida o usuário/senha do Moodle, cria uma chave de API no Supabase e salva a sessão local do painel no navegador.
+
+O login do painel é feito pela chave de API: o frontend chama `/session` no `moodle-proxy` com `Authorization: Bearer <chave>` e só libera o dashboard se o backend confirmar a chave.
+
+Este MVP ainda não usa senha própria de conta via Supabase Auth. A credencial real do painel é a chave de API emitida pelo backend.
+
 ## Rotas do backend
 
 | Método | Rota | Descrição |

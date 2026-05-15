@@ -241,6 +241,12 @@ label,
   transform: translateY(-1px);
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
 .button-secondary {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
@@ -425,6 +431,24 @@ label,
   padding: 0.9rem 1rem;
 }
 
+.form-grid input:focus,
+.service-select:focus {
+  outline: 2px solid rgba(54, 194, 255, 0.36);
+  outline-offset: 2px;
+}
+
+.form-help {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.form-help a {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .api-key-box,
 .code-panel {
   margin-top: 1rem;
@@ -446,6 +470,32 @@ label,
   line-height: 1.65;
 }
 
+.alert {
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  background: rgba(54, 194, 255, 0.08);
+  color: var(--text);
+  line-height: 1.55;
+  padding: 0.9rem 1rem;
+}
+
+.alert-error {
+  border-color: rgba(251, 113, 133, 0.42);
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.alert-success {
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.session-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
 .two-columns-list {
   columns: 2;
   column-gap: 1.5rem;
@@ -465,6 +515,7 @@ label,
   .hero-panel,
   .two-columns,
   .feature-grid,
+  .session-grid,
   .four-columns {
     grid-template-columns: 1fr;
   }

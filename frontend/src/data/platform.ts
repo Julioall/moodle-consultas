@@ -28,13 +28,6 @@ export const trustPoints = [
   'O produto começa com Moodle e cresce para novos serviços.',
 ];
 
-export const dashboardStats = [
-  { label: 'Serviços ativos', value: '1' },
-  { label: 'Chave de API', value: 'Criada' },
-  { label: 'Schemas disponíveis', value: '1' },
-  { label: 'Último acesso', value: 'Hoje, 14:30' },
-];
-
 export const services: ServiceCard[] = [
   {
     name: 'Moodle',
@@ -87,7 +80,5 @@ export const helpProblems = [
   'Endpoint indisponível.',
   'Permissão insuficiente.',
 ];
-
-export const apiKeyPreview = 'sk_live_••••••••••••••••••••9f3a';
 
 export const yamlSourceUrl = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/schemas/moodle.yaml`;

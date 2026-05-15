@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { services } from '../data/platform';
+import { useAuth } from '../features/auth/AuthProvider';
 
 const menuItems = [
   { to: '/dashboard', label: 'Visão geral' },
@@ -10,12 +11,22 @@ const menuItems = [
 ];
 
 export function DashboardLayout() {
+  const { logout, session } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="app-shell dashboard-shell">
       <aside className="sidebar">
         <div>
           <div className="brand">Central de Actions</div>
-          <p className="brand-subtitle">Painel para serviços ativos e schemas prontos.</p>
+          <p className="brand-subtitle">
+            {session?.moodleUser?.fullname || session?.name || 'Painel para serviços ativos e schemas prontos.'}
+          </p>
         </div>
 
         <nav className="sidebar-nav" aria-label="Seções do dashboard">
@@ -46,6 +57,9 @@ export function DashboardLayout() {
             <NavLink to="/dashboard/yaml" className="button">
               Copiar YAML
             </NavLink>
+            <button className="button button-ghost" type="button" onClick={handleLogout}>
+              Sair
+            </button>
           </div>
         </header>
 

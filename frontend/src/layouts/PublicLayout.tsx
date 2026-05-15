@@ -1,7 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { platformName } from '../data/platform';
+import { useAuth } from '../features/auth/AuthProvider';
 
 export function PublicLayout() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <div className="app-shell public-shell">
       <header className="topbar">
@@ -16,7 +19,7 @@ export function PublicLayout() {
           </NavLink>
           <NavLink to="/login">Entrar</NavLink>
           <NavLink to="/register">Criar conta</NavLink>
-          <NavLink to="/dashboard">Dashboard</NavLink>
+          {isAuthenticated ? <NavLink to="/dashboard">Dashboard</NavLink> : null}
         </nav>
       </header>
 
