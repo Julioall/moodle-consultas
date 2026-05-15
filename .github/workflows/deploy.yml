@@ -9,6 +9,7 @@ jobs:
   deploy:
     name: Migrations + Edge Functions
     runs-on: ubuntu-latest
+    environment: moodle-consultas
 
     env:
       SUPABASE_PROJECT_ID: scrzziyuruzzhebpzvdl
