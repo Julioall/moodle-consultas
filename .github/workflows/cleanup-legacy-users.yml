@@ -63,6 +63,6 @@ jobs:
           }
 
           direct_connection="host=db.${SUPABASE_PROJECT_ID}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require connect_timeout=10"
-          pooler_connection="host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres user=postgres.${SUPABASE_PROJECT_ID} sslmode=require connect_timeout=10"
+          pooler_connection="host=aws-0-sa-east-1.pooler.supabase.com port=6543 dbname=postgres user=postgres.${SUPABASE_PROJECT_ID} sslmode=require connect_timeout=10"
 
           run_cleanup "direct" "$direct_connection" || run_cleanup "pooler" "$pooler_connection"
