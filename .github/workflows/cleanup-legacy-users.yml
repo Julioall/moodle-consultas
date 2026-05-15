@@ -6,63 +6,65 @@ on:
       - main
     paths:
       - .github/workflows/cleanup-legacy-users.yml
+      - supabase/functions/cleanup-legacy-users/**
 
 permissions:
   contents: read
 
 jobs:
   cleanup:
-    name: Truncate legacy API key tables
+    name: Cleanup through temporary Edge Function
     runs-on: ubuntu-latest
     environment: moodle-consultas
 
     env:
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_ID: scrzziyuruzzhebpzvdl
+      FUNCTION_URL: https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/cleanup-legacy-users
 
     steps:
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Cleanup legacy users
-        env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Generate cleanup token
         run: |
-          if [ -z "$PGPASSWORD" ]; then
-            echo "::error::SUPABASE_DB_PASSWORD secret is not configured."
+          CLEANUP_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$CLEANUP_TOKEN"
+          echo "CLEANUP_TOKEN=$CLEANUP_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Deploy temporary cleanup function
+        run: |
+          supabase secrets set CLEANUP_TOKEN="$CLEANUP_TOKEN" --project-ref "$SUPABASE_PROJECT_ID"
+          supabase functions deploy cleanup-legacy-users \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --no-verify-jwt
+
+      - name: Run cleanup
+        run: |
+          response="$(
+            curl -fsS \
+              -X POST "$FUNCTION_URL" \
+              -H "x-cleanup-token: $CLEANUP_TOKEN"
+          )"
+
+          echo "$response" | jq .
+
+          api_keys_count="$(echo "$response" | jq -r '.after.apiKeys')"
+          moodle_sessions_count="$(echo "$response" | jq -r '.after.moodleSessions')"
+
+          if [ "$api_keys_count" != "0" ] || [ "$moodle_sessions_count" != "0" ]; then
+            echo "::error::Cleanup validation failed: api_keys=$api_keys_count moodle_sessions=$moodle_sessions_count"
             exit 1
           fi
 
-          SQL_FILE="$(mktemp)"
-          cat > "$SQL_FILE" <<'SQL'
-          begin;
+          echo "::notice::Cleanup completed: api_keys=$api_keys_count moodle_sessions=$moodle_sessions_count"
 
-          truncate table public.moodle_user_sessions restart identity cascade;
-          truncate table public.api_keys restart identity cascade;
-
-          commit;
-
-          select count(*) as api_keys_count from public.api_keys;
-          select count(*) as moodle_sessions_count from public.moodle_user_sessions;
-          SQL
-
-          run_cleanup() {
-            local label="$1"
-            local connection="$2"
-
-            if psql "$connection" -v ON_ERROR_STOP=1 -f "$SQL_FILE" > cleanup.out 2> cleanup.err; then
-              cat cleanup.out
-              return 0
-            fi
-
-            error_message="$(tail -n 8 cleanup.err | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
-            echo "::warning::${label} connection failed: ${error_message}"
-            return 1
-          }
-
-          direct_connection="host=db.${SUPABASE_PROJECT_ID}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require connect_timeout=10"
-          pooler_connection="host=aws-0-sa-east-1.pooler.supabase.com port=6543 dbname=postgres user=postgres.${SUPABASE_PROJECT_ID} sslmode=require connect_timeout=10"
-
-          run_cleanup "direct" "$direct_connection" || run_cleanup "pooler" "$pooler_connection"
+      - name: Remove cleanup secret
+        if: always()
+        run: |
+          supabase secrets unset CLEANUP_TOKEN --project-ref "$SUPABASE_PROJECT_ID" || true
