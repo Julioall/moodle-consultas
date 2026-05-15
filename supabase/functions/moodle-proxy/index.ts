@@ -970,6 +970,16 @@ GET("/session", async (url, _, auth) => {
 });
 
 GET("/courses", async (url, _, auth) => {
+  const query = (url.searchParams.get("query") ?? "").trim();
+  if (query) {
+    const data = await moodleCall("core_course_search_courses", {
+      criterianame: "search", criteriavalue: query,
+      page: toInt(url.searchParams.get("page"), 0),
+      perpage: Math.min(toInt(url.searchParams.get("perPage"), 20)!, 100),
+      limittoenrolled: toBool(url.searchParams.get("limitToEnrolled"), false) ? 1 : 0,
+    }, auth);
+    return okJson("core_course_search_courses", data);
+  }
   const data = await moodleCall("core_course_get_courses_by_field", {
     field: url.searchParams.get("field") ?? "",
     value: url.searchParams.get("value") ?? "",
@@ -1006,9 +1016,16 @@ GET("/courses/:courseId/students", async (url, p, auth) => {
 });
 
 GET("/users/search", async (url, _, auth) => {
+  const field = (url.searchParams.get("field") ?? "").trim();
+  if (field) {
+    const values = splitCsv(url.searchParams.get("values"));
+    if (values.length === 0) return errResp(400, "values_required", "Informe values quando usar field.");
+    const data = await moodleCall("core_user_get_users_by_field", { field, values }, auth);
+    return okJson("core_user_get_users_by_field", data);
+  }
   const key = (url.searchParams.get("key") ?? "").trim();
   const value = (url.searchParams.get("value") ?? "").trim();
-  if (!key || !value) return errResp(400, "criteria_required", "Informe key e value.");
+  if (!key || !value) return errResp(400, "criteria_required", "Informe key e value ou field e values.");
   const data = await moodleCall("core_user_get_users", { criteria: [{ key, value }] }, auth);
   return okJson("core_user_get_users", data);
 });
@@ -1365,7 +1382,7 @@ GET("/discussions/:discussionId/posts", async (_, p, auth) => {
 GET("/courses/:courseId/calendar", async (url, p, auth) => {
   const now = Math.floor(Date.now() / 1000);
   const timesortfrom = toInt(url.searchParams.get("from")) ?? now;
-  const timesortto = toInt(url.searchParams.get("to")) ?? now + 60 * 60 * 24 * 90; // 90 dias
+  const timesortto = toInt(url.searchParams.get("to")) ?? now + 60 * 60 * 24 * 90;
   const data = await moodleCall("core_calendar_get_action_events_by_course", {
     courseid: Number(p.courseId),
     timesortfrom,
@@ -1402,51 +1419,78 @@ GET("/modules/:cmid/rubric", async (_, p, auth) => {
   return okJson("core_grading_get_definitions", data);
 });
 
+function extractPdfText(bytes: Uint8Array): string {
+  const str = new TextDecoder("latin1").decode(bytes);
+  const texts: string[] = [];
+  const btRegex = /BT([\s\S]{1,5000}?)ET/g;
+  let btMatch;
+  while ((btMatch = btRegex.exec(str)) !== null) {
+    const block = btMatch[1];
+    const strRegex = /\(([^)\\]*(?:\\.[^)\\]*)*)\)|<([0-9A-Fa-f\s]+)>/g;
+    let strMatch;
+    while ((strMatch = strRegex.exec(block)) !== null) {
+      if (strMatch[1] !== undefined) {
+        texts.push(
+          strMatch[1]
+            .replace(/\\n/g, "\n").replace(/\\r/g, "\r")
+            .replace(/\\t/g, "\t").replace(/\\\\/g, "\\")
+            .replace(/\\\(/g, "(").replace(/\\\)/g, ")")
+        );
+      } else if (strMatch[2] !== undefined) {
+        const hex = strMatch[2].replace(/\s/g, "");
+        let decoded = "";
+        for (let i = 0; i < hex.length; i += 2) {
+          decoded += String.fromCharCode(parseInt(hex.substring(i, i + 2), 16));
+        }
+        texts.push(decoded);
+      }
+    }
+    texts.push(" ");
+  }
+  return texts.join("").replace(/\s{2,}/g, " ").trim();
+}
+
 GET("/files/download", async (url, _, auth) => {
   const fileurl = (url.searchParams.get("fileurl") ?? "").trim();
-  if (!fileurl) return errResp(400, "fileurl_required", "Informe o parâmetro fileurl.");
-
-  if (!MOODLE_BASE_URL) {
-    return errResp(500, "config_error", "MOODLE_BASE_URL não configurado.");
-  }
-
-  // Segurança: só permite URLs do próprio Moodle configurado
-  if (!fileurl.startsWith(MOODLE_BASE_URL)) {
-    return errResp(403, "invalid_fileurl", "O fileurl deve pertencer ao servidor Moodle configurado.");
-  }
-
-  // Anexa o token à URL (Moodle aceita token como query param em pluginfile.php)
-  const targetUrl = new URL(fileurl);
-  targetUrl.searchParams.set("token", auth.moodleToken);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MOODLE_TIMEOUT_MS);
-
-  let response: Response;
+  if (!fileurl) return errResp(400, "fileurl_required", "Informe o parâmetro fileurl com a URL do arquivo Moodle.");
+  const separator = fileurl.includes("?") ? "&" : "?";
+  const authedUrl = `${fileurl}${separator}token=${encodeURIComponent(auth.moodleToken)}`;
+  let resp: Response;
   try {
-    response = await fetch(targetUrl.toString(), { signal: controller.signal });
+    resp = await fetch(authedUrl, {
+      headers: { "User-Agent": "MoodleProxy/1.0" },
+      signal: AbortSignal.timeout(15000),
+    });
   } catch (err) {
     const e = err as Error;
-    if (e.name === "AbortError") {
-      return errResp(504, "timeout", `Timeout ao baixar arquivo do Moodle (>${MOODLE_TIMEOUT_MS}ms).`);
-    }
-    return errResp(502, "fetch_error", `Erro de rede ao baixar arquivo: ${e.message}`);
-  } finally {
-    clearTimeout(timeoutId);
+    return errResp(504, "file_fetch_timeout", `Timeout ao baixar arquivo: ${e.message}`);
   }
-
-  if (!response.ok) {
-    return errResp(502, "moodle_file_error", `Moodle retornou HTTP ${response.status} ao buscar o arquivo.`);
+  if (!resp.ok) {
+    await resp.body?.cancel();
+    return errResp(resp.status, "file_fetch_error", `Erro ao baixar arquivo (${resp.status}): ${resp.statusText}`);
   }
-
-  // Repassa Content-Type e Content-Disposition do Moodle, mais CORS
-  const headers = new Headers(corsHeaders);
-  const contentType = response.headers.get("content-type");
-  const contentDisposition = response.headers.get("content-disposition");
-  if (contentType) headers.set("content-type", contentType);
-  if (contentDisposition) headers.set("content-disposition", contentDisposition);
-
-  return new Response(response.body, { status: 200, headers });
+  const contentType = (resp.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim();
+  if (contentType.startsWith("text/") || contentType === "application/json") {
+    const text = await resp.text();
+    return okJson("file_text_content", { contentType, text, fileurl });
+  }
+  if (contentType === "application/pdf") {
+    const buffer = await resp.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const text = extractPdfText(bytes);
+    return okJson("file_pdf_content", {
+      contentType, sizeBytes: bytes.length, fileurl,
+      text: text || null,
+      note: text ? null : "Texto não extraído — PDF pode estar escaneado ou com codificação não suportada.",
+    });
+  }
+  const contentLength = resp.headers.get("content-length");
+  await resp.body?.cancel();
+  return okJson("file_binary_info", {
+    contentType, sizeBytes: contentLength ? Number(contentLength) : null,
+    downloadUrl: authedUrl, fileurl,
+    note: "Arquivo binário. Use downloadUrl para baixar diretamente.",
+  });
 });
 
 Deno.serve(async (req: Request) => {
