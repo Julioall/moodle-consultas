@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidade — Moodle Consultas</title>
+  <meta name="description" content="Política de Privacidade do Moodle Consultas, com informações sobre coleta, uso, armazenamento e direitos dos titulares." />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0f172a;
+      --bg-soft: #111827;
+      --card: rgba(255, 255, 255, 0.96);
+      --text: #0f172a;
+      --muted: #475569;
+      --line: #dbe3ee;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(79, 70, 229, 0.20), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.14), transparent 28%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+    }
+
+    .shell {
+      width: min(1040px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.5rem 0 3rem;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .brand {
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #0f172a;
+    }
+
+    .home-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(238,242,255,0.9));
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 2rem;
+      margin-bottom: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -8rem -8rem auto;
+      width: 18rem;
+      height: 18rem;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(79, 70, 229, 0.16) 0%, transparent 72%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .35rem .7rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      margin: 0 0 .75rem;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .lede {
+      max-width: 70ch;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .75rem;
+      margin: 1.25rem 0 0;
+    }
+
+    .meta-item {
+      background: rgba(255,255,255,0.72);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: .9rem 1rem;
+    }
+
+    .meta-label {
+      display: block;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: .35rem;
+    }
+
+    .meta-value {
+      color: #111827;
+      font-size: .95rem;
+      line-height: 1.45;
+    }
+
+    .content {
+      background: var(--card);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 1.5rem 1.5rem 1rem;
+    }
+
+    section {
+      padding: 1rem 0 1.25rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child { border-bottom: 0; }
+
+    h2 {
+      margin: 0 0 .7rem;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+
+    p, li {
+      color: var(--muted);
+      line-height: 1.7;
+      margin: 0;
+      font-size: .98rem;
+    }
+
+    ul {
+      margin: .75rem 0 0;
+      padding-left: 1.15rem;
+    }
+
+    li + li { margin-top: .45rem; }
+
+    .callout {
+      background: linear-gradient(180deg, #eff6ff, #eef2ff);
+      border: 1px solid #c7d2fe;
+      border-radius: 18px;
+      padding: 1rem 1rem;
+      color: #3730a3;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      padding: 1rem .25rem 0;
+      color: #64748b;
+      font-size: .92rem;
+      flex-wrap: wrap;
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 1rem, 1040px); padding-top: .75rem; }
+      .hero, .content { padding: 1.25rem; border-radius: 20px; }
+      .meta { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .footer { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand">Moodle Consultas</div>
+      <a class="home-link" href="../">Voltar para o cadastro</a>
+    </div>
+
+    <header class="hero">
+      <div class="eyebrow">Política de Privacidade</div>
+      <h1>Como tratamos dados no Moodle Consultas</h1>
+      <p class="lede">Este documento descreve, de forma objetiva, como a aplicação trata dados de cadastro, autenticação e consulta ao Moodle para apoiar o uso da API e das GPT Actions associadas ao projeto.</p>
+
+      <div class="meta">
+        <div class="meta-item">
+          <span class="meta-label">Última atualização</span>
+          <div class="meta-value">14 de maio de 2026</div>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Escopo</span>
+          <div class="meta-value">Página de cadastro, Edge Functions, proxy Moodle e OpenAPI.</div>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status</span>
+          <div class="meta-value">Modelo operacional a ser validado pelo responsável jurídico.</div>
+        </div>
+      </div>
+    </header>
+
+    <article class="content">
+      <section>
+        <h2>1. Quem somos</h2>
+        <p>O Moodle Consultas é uma API de consulta, em modo somente leitura, que permite a usuários autorizados consultar informações acadêmicas do Moodle por meio de GPT Actions. O projeto utiliza Supabase Edge Functions como proxy entre o ChatGPT Action e os Web Services do Moodle.</p>
+      </section>
+
+      <section>
+        <h2>2. Abrangência desta política</h2>
+        <p>Esta política explica como o projeto trata dados pessoais na página de cadastro, nas Edge Functions <strong>register</strong> e <strong>moodle-proxy</strong>, e no schema OpenAPI usado para configurar as GPT Actions.</p>
+      </section>
+
+      <section>
+        <h2>3. Dados pessoais que podemos tratar</h2>
+        <ul>
+          <li>Nome, e-mail e chave de API gerada para autenticação.</li>
+          <li>Data e hora de cadastro, status da chave e metadados técnicos de requisição.</li>
+          <li>Dados acadêmicos retornados pelo Moodle conforme as permissões do token técnico configurado pela instituição.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Finalidades do tratamento</h2>
+        <ul>
+          <li>Cadastrar usuários autorizados e gerar chaves de API.</li>
+          <li>Autenticar requisições e permitir consultas acadêmicas autorizadas.</li>
+          <li>Proteger o ambiente contra uso indevido, acessos não autorizados e exposição de segredos.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. Armazenamento, segurança e direitos</h2>
+        <p>Os dados de cadastro são armazenados no Supabase enquanto forem necessários para autenticação, auditoria operacional e segurança do serviço. O projeto adota controles como Bearer token, validação de chaves ativas, armazenamento de segredos apenas no backend e limitação do proxy a operações de leitura.</p>
+      </section>
+
+      <section class="callout">
+        <h2>Contato e documento completo</h2>
+        <p>A versão completa desta política está mantida no repositório e deve ser revisada pelo responsável jurídico ou encarregado de dados antes da publicação oficial. Caso precise, o link de privacidade também está disponível na página inicial.</p>
+      </section>
+    </article>
+
+    <div class="footer">
+      <span>Documento de apoio para publicação do projeto.</span>
+      <a href="../">Ir para a página inicial</a>
+    </div>
+  </main>
+</body>
+</html>
