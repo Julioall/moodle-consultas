@@ -6,6 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const API_KEY_HASH_SECRET = Deno.env.get("API_KEY_HASH_SECRET") ?? "";
 const MOODLE_BASE_URL = (Deno.env.get("MOODLE_BASE_URL") ?? "").replace(/\/$/, "");
 const MOODLE_SESSION_SECRET = Deno.env.get("MOODLE_SESSION_SECRET") ?? "";
+const MOODLE_FIXED_TOKEN = Deno.env.get("MOODLE_FIXED_TOKEN") ?? "";
 const MOODLE_TIMEOUT_MS = 8000;
 
 const corsHeaders = {
@@ -29,6 +30,19 @@ const READ_ONLY_FUNCTIONS = new Set([
   "mod_assign_get_grades",
   "block_configurable_reports_get_report_data",
   "core_webservice_get_site_info",
+  // Fóruns
+  "mod_forum_get_forums_by_courses",
+  "mod_forum_get_forum_discussions",
+  "mod_forum_get_discussion_posts",
+  // Calendário
+  "core_calendar_get_action_events_by_course",
+  // Quiz
+  "mod_quiz_get_quizzes_by_courses",
+  // Rubrica / guia de avaliação
+  "core_grading_get_definitions",
+  // SCORM
+  "mod_scorm_get_scorms_by_courses",
+  "mod_scorm_get_scorm_toc_json",
 ]);
 
 interface AuthContext {
@@ -36,7 +50,7 @@ interface AuthContext {
   userId?: string | null;
   serviceId?: string | null;
   userServiceId?: string | null;
-  moodleMode: "user";
+  moodleMode: "user" | "fallback";
   moodleToken: string;
   moodleUserId?: number | null;
   moodleUsername?: string | null;
@@ -813,6 +827,13 @@ async function validateApiKey(req: Request): Promise<AuthContext | null> {
 
   if (error || apiKey === null) return null;
 
+  if (!apiKey.user_id) {
+    throw Object.assign(new Error("Esta API key não está vinculada a uma conta ativa da plataforma. Gere uma nova chave no dashboard antes de usar o Moodle."), {
+      status: 401,
+      error: "api_key_user_required",
+    });
+  }
+
   const { data: service, error: serviceError } = await supabase
     .from("services")
     .select("id, name, slug, status")
@@ -840,11 +861,23 @@ async function validateApiKey(req: Request): Promise<AuthContext | null> {
     });
   }
 
+  const useFallback = (reason: string) => {
+    if (!MOODLE_FIXED_TOKEN) {
+      throw Object.assign(new Error(reason), { status: 403, error: "service_inactive" });
+    }
+    supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", apiKey.id);
+    return {
+      apiKeyId: apiKey.id,
+      userId: apiKey.user_id,
+      serviceId: service.id,
+      userServiceId: null,
+      moodleMode: "fallback" as const,
+      moodleToken: MOODLE_FIXED_TOKEN,
+    };
+  };
+
   if (!userService || userService.status !== "active") {
-    throw Object.assign(new Error("Serviço Moodle não está ativo para esta conta."), {
-      status: 403,
-      error: "service_inactive",
-    });
+    return useFallback("Serviço Moodle não está ativo para esta conta.");
   }
 
   const { data: session, error: sessionError } = await supabase
@@ -866,18 +899,12 @@ async function validateApiKey(req: Request): Promise<AuthContext | null> {
   }
 
   if (!session) {
-    throw Object.assign(new Error("Serviço Moodle ativo, mas sem sessão Moodle válida. Reative o serviço."), {
-      status: 403,
-      error: "moodle_session_required",
-    });
+    return useFallback("Serviço Moodle ativo, mas sem sessão Moodle válida.");
   }
 
   const expiresAt = session.expires_at ? new Date(String(session.expires_at)) : null;
   if (expiresAt && expiresAt.getTime() <= Date.now()) {
-    throw Object.assign(new Error("Sessão Moodle expirada. Reative o serviço Moodle no painel."), {
-      status: 401,
-      error: "moodle_session_expired",
-    });
+    return useFallback("Sessão Moodle expirada.");
   }
 
   const moodleToken = await decryptToken(String(session.token_ciphertext), String(session.token_iv));
@@ -1266,6 +1293,160 @@ GET("/reports/configurable/:reportId", async (url, p, auth) => {
   if (courseId) params.courseid = courseId;
   const data = await moodleCall("block_configurable_reports_get_report_data", params, auth);
   return okJson("block_configurable_reports_get_report_data", data);
+});
+
+// ─── Detalhes de módulo ────────────────────────────────────────────────────
+GET("/courses/:courseId/modules/:cmid", async (_, p, auth) => {
+  const courseId = Number(p.courseId);
+  const cmid = Number(p.cmid);
+  const sections: unknown[] = await moodleCall("core_course_get_contents", { courseid: courseId }, auth);
+  for (const section of sections as Record<string, unknown>[]) {
+    const modules = (section.modules ?? []) as Record<string, unknown>[];
+    const mod = modules.find((m) => Number(m.id) === cmid);
+    if (mod) {
+      return okJson("core_course_get_contents", { section: { id: section.id, name: section.name }, module: mod });
+    }
+  }
+  return errResp(404, "module_not_found", `Módulo ${cmid} não encontrado no curso ${courseId}.`);
+});
+
+// ─── Todos os recursos do curso organizados por seção ──────────────────────
+GET("/courses/:courseId/resources", async (_, p, auth) => {
+  const courseId = Number(p.courseId);
+  const RESOURCE_TYPES = new Set(["resource", "folder", "url", "page", "book", "assign", "label", "scorm", "quiz", "forum"]);
+  const sections: unknown[] = await moodleCall("core_course_get_contents", { courseid: courseId }, auth);
+  const result = (sections as Record<string, unknown>[]).map((section) => {
+    const modules = ((section.modules ?? []) as Record<string, unknown>[])
+      .filter((m) => RESOURCE_TYPES.has(String(m.modname ?? "")));
+    return { id: section.id, name: section.name, modules };
+  }).filter((s) => s.modules.length > 0);
+  return okJson("core_course_get_contents", result);
+});
+
+// ─── Tarefa (assignment) específica do curso ───────────────────────────────
+GET("/courses/:courseId/assignments/:assignmentId", async (_, p, auth) => {
+  const courseId = Number(p.courseId);
+  const assignId = Number(p.assignmentId);
+  const data = await moodleCall("mod_assign_get_assignments", { courseids: [courseId] }, auth) as Record<string, unknown>;
+  const courses = (data.courses ?? []) as Record<string, unknown>[];
+  for (const c of courses) {
+    const assignments = (c.assignments ?? []) as Record<string, unknown>[];
+    const found = assignments.find((a) => Number(a.id) === assignId);
+    if (found) return okJson("mod_assign_get_assignments", found);
+  }
+  return errResp(404, "assignment_not_found", `Assignment ${assignId} não encontrado no curso ${courseId}.`);
+});
+
+// ─── Fóruns do curso ───────────────────────────────────────────────────────
+GET("/courses/:courseId/forums", async (_, p, auth) => {
+  const data = await moodleCall("mod_forum_get_forums_by_courses", { courseids: [Number(p.courseId)] }, auth);
+  return okJson("mod_forum_get_forums_by_courses", data);
+});
+
+// ─── Discussões de um fórum ────────────────────────────────────────────────
+GET("/forums/:forumId/discussions", async (url, p, auth) => {
+  const page = toInt(url.searchParams.get("page")) ?? 0;
+  const perPage = toInt(url.searchParams.get("perPage")) ?? 10;
+  const data = await moodleCall("mod_forum_get_forum_discussions", {
+    forumid: Number(p.forumId),
+    page,
+    perpage: perPage,
+  }, auth);
+  return okJson("mod_forum_get_forum_discussions", data);
+});
+
+// ─── Posts de uma discussão ────────────────────────────────────────────────
+GET("/discussions/:discussionId/posts", async (_, p, auth) => {
+  const data = await moodleCall("mod_forum_get_discussion_posts", { discussionid: Number(p.discussionId) }, auth);
+  return okJson("mod_forum_get_discussion_posts", data);
+});
+
+// ─── Calendário do curso ───────────────────────────────────────────────────
+GET("/courses/:courseId/calendar", async (url, p, auth) => {
+  const now = Math.floor(Date.now() / 1000);
+  const timesortfrom = toInt(url.searchParams.get("from")) ?? now;
+  const timesortto = toInt(url.searchParams.get("to")) ?? now + 60 * 60 * 24 * 90; // 90 dias
+  const data = await moodleCall("core_calendar_get_action_events_by_course", {
+    courseid: Number(p.courseId),
+    timesortfrom,
+    timesortto,
+  }, auth);
+  return okJson("core_calendar_get_action_events_by_course", data);
+});
+
+// ─── Quizzes do curso ──────────────────────────────────────────────────────
+GET("/courses/:courseId/quizzes", async (_, p, auth) => {
+  const data = await moodleCall("mod_quiz_get_quizzes_by_courses", { courseids: [Number(p.courseId)] }, auth);
+  return okJson("mod_quiz_get_quizzes_by_courses", data);
+});
+
+// ─── SCORM do curso ────────────────────────────────────────────────────────
+GET("/courses/:courseId/scorm", async (_, p, auth) => {
+  const data = await moodleCall("mod_scorm_get_scorms_by_courses", { courseids: [Number(p.courseId)] }, auth);
+  return okJson("mod_scorm_get_scorms_by_courses", data);
+});
+
+// ─── Tabela de conteúdos (TOC) de um SCORM ────────────────────────────────
+GET("/scorm/:scormId/toc", async (_, p, auth) => {
+  const data = await moodleCall("mod_scorm_get_scorm_toc_json", { scormid: Number(p.scormId) }, auth);
+  return okJson("mod_scorm_get_scorm_toc_json", data);
+});
+
+// ─── Rubrica / guia de avaliação de um módulo ─────────────────────────────
+GET("/modules/:cmid/rubric", async (_, p, auth) => {
+  const data = await moodleCall("core_grading_get_definitions", {
+    cmids: [Number(p.cmid)],
+    plugintype: "rubric",
+    pluginname: "rubric",
+  }, auth);
+  return okJson("core_grading_get_definitions", data);
+});
+
+GET("/files/download", async (url, _, auth) => {
+  const fileurl = (url.searchParams.get("fileurl") ?? "").trim();
+  if (!fileurl) return errResp(400, "fileurl_required", "Informe o parâmetro fileurl.");
+
+  if (!MOODLE_BASE_URL) {
+    return errResp(500, "config_error", "MOODLE_BASE_URL não configurado.");
+  }
+
+  // Segurança: só permite URLs do próprio Moodle configurado
+  if (!fileurl.startsWith(MOODLE_BASE_URL)) {
+    return errResp(403, "invalid_fileurl", "O fileurl deve pertencer ao servidor Moodle configurado.");
+  }
+
+  // Anexa o token à URL (Moodle aceita token como query param em pluginfile.php)
+  const targetUrl = new URL(fileurl);
+  targetUrl.searchParams.set("token", auth.moodleToken);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), MOODLE_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(targetUrl.toString(), { signal: controller.signal });
+  } catch (err) {
+    const e = err as Error;
+    if (e.name === "AbortError") {
+      return errResp(504, "timeout", `Timeout ao baixar arquivo do Moodle (>${MOODLE_TIMEOUT_MS}ms).`);
+    }
+    return errResp(502, "fetch_error", `Erro de rede ao baixar arquivo: ${e.message}`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    return errResp(502, "moodle_file_error", `Moodle retornou HTTP ${response.status} ao buscar o arquivo.`);
+  }
+
+  // Repassa Content-Type e Content-Disposition do Moodle, mais CORS
+  const headers = new Headers(corsHeaders);
+  const contentType = response.headers.get("content-type");
+  const contentDisposition = response.headers.get("content-disposition");
+  if (contentType) headers.set("content-type", contentType);
+  if (contentDisposition) headers.set("content-disposition", contentDisposition);
+
+  return new Response(response.body, { status: 200, headers });
 });
 
 Deno.serve(async (req: Request) => {
