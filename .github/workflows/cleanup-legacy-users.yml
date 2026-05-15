@@ -1,0 +1,52 @@
+name: One-off cleanup legacy users
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-legacy-users.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Truncate legacy API key tables
+    runs-on: ubuntu-latest
+    environment: moodle-consultas
+
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: scrzziyuruzzhebpzvdl
+      PGHOST: aws-0-us-east-1.pooler.supabase.com
+      PGPORT: "6543"
+      PGDATABASE: postgres
+      PGUSER: postgres.scrzziyuruzzhebpzvdl
+
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Cleanup legacy users
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$PGPASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD secret is not configured."
+            exit 1
+          fi
+
+          psql "sslmode=require" -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+
+          truncate table public.moodle_user_sessions restart identity cascade;
+          truncate table public.api_keys restart identity cascade;
+
+          commit;
+
+          select count(*) as api_keys_count from public.api_keys;
+          select count(*) as moodle_sessions_count from public.moodle_user_sessions;
+          SQL
