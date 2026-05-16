@@ -31,7 +31,6 @@ supabase/
 frontend/
   index.html                # entrada do app React + Vite
   src/                      # Home, Login, Register, Dashboard, Services, API Key, YAML e Help
-  public/schemas/moodle.yaml
 openapi/
   moodle_consultas.yaml     # spec OpenAPI canônica do conector Moodle
 docs/

@@ -10,7 +10,7 @@ const MOODLE_SESSION_SECRET = Deno.env.get("MOODLE_SESSION_SECRET") ?? "";
 const MOODLE_SESSION_TTL_SECONDS = Number(Deno.env.get("MOODLE_SESSION_TTL_SECONDS") ?? "43200");
 const MOODLE_OPENAPI_SCHEMA_URL =
   Deno.env.get("MOODLE_OPENAPI_SCHEMA_URL") ??
-  "https://julioall.github.io/moodle-consultas/schemas/moodle.yaml";
+  "https://raw.githubusercontent.com/Julioall/moodle-consultas/main/openapi/moodle_consultas.yaml";
 const MOODLE_TIMEOUT_MS = 8000;
 
 const corsHeaders = {
@@ -22,7 +22,7 @@ const corsHeaders = {
 const fallbackMoodleSchema = `openapi: 3.1.0
 info:
   title: Moodle Actions Hub API
-  version: 2.1.0
+  version: 3.0.0
 servers:
   - url: https://scrzziyuruzzhebpzvdl.supabase.co/functions/v1/moodle-proxy
 security:
@@ -575,7 +575,7 @@ async function listSchemas(ctx: RouteContext) {
       serviceSlug: service.slug,
       serviceName: service.name,
       format: "yaml",
-      version: service.slug === "moodle" ? "2.1.0" : null,
+      version: service.slug === "moodle" ? "3.0.0" : null,
       url: `/schemas/${service.slug}.yaml`,
       available: service.slug === "moodle",
     }));

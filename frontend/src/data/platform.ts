@@ -81,4 +81,4 @@ export const helpProblems = [
   'Permissão insuficiente.',
 ];
 
-export const yamlSourceUrl = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/schemas/moodle.yaml`;
+export const yamlSourceUrl = 'https://raw.githubusercontent.com/Julioall/moodle-consultas/main/openapi/moodle_consultas.yaml';
