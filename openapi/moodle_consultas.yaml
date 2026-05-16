@@ -19,42 +19,6 @@ servers:
 security:
   - bearerAuth: []
 paths:
-  /health:
-    get:
-      operationId: healthCheck
-      summary: Verificar se o proxy está ativo
-      security: []
-      responses:
-        "200":
-          description: Status do proxy.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-
-  /session:
-    get:
-      operationId: getMoodleSession
-      summary: Consultar a sessão Moodle vinculada à chave de API
-      description: >
-        Retorna a sessão Moodle vinculada à conta da chave de API. Use validate=true para validar
-        a sessão de usuário chamando core_webservice_get_site_info. O token Moodle nunca é retornado.
-      parameters:
-        - in: query
-          name: validate
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: Se true, valida a sessão atual contra o Moodle quando a sessão for de usuário.
-      responses:
-        "200":
-          $ref: "#/components/responses/MoodleOk"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
   /courses:
     get:
       operationId: findCourses
@@ -370,34 +334,6 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /users/by-field:
-    get:
-      operationId: getUsersByField
-      summary: Consultar usuários por campo exato
-      description: Usa core_user_get_users_by_field para id, idnumber, username ou email.
-      parameters:
-        - in: query
-          name: field
-          required: true
-          schema:
-            type: string
-            enum: ["id", "idnumber", "username", "email"]
-        - in: query
-          name: values
-          required: true
-          schema:
-            type: string
-          description: Um ou mais valores separados por vírgula.
-      responses:
-        "200":
-          $ref: "#/components/responses/MoodleOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
   /users/{userId}/courses:
     get:
       operationId: getUserCourses
@@ -593,26 +529,6 @@ paths:
           schema:
             type: integer
           description: ID da discussão no Moodle.
-      responses:
-        "200":
-          $ref: "#/components/responses/MoodleOk"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /scorm/{scormId}/toc:
-    get:
-      operationId: getScormToc
-      summary: Consultar tabela de conteúdos de um SCORM
-      description: Usa mod_scorm_get_scorm_toc_json.
-      parameters:
-        - in: path
-          name: scormId
-          required: true
-          schema:
-            type: integer
-          description: ID do pacote SCORM no Moodle.
       responses:
         "200":
           $ref: "#/components/responses/MoodleOk"
@@ -938,32 +854,6 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /reports/configurable/{reportId}:
-    get:
-      operationId: getConfigurableReport
-      summary: Consultar relatório configurável do Moodle
-      description: Usa block_configurable_reports_get_report_data quando o plugin estiver disponível.
-      parameters:
-        - in: path
-          name: reportId
-          required: true
-          schema:
-            type: integer
-          description: ID do relatório configurável.
-        - in: query
-          name: courseId
-          required: false
-          schema:
-            type: integer
-          description: ID do curso para escopo do relatório, quando aplicável.
-      responses:
-        "200":
-          $ref: "#/components/responses/MoodleOk"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
 components:
   securitySchemes:
     bearerAuth:
@@ -1096,21 +986,6 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
-    HealthResponse:
-      type: object
-      additionalProperties: true
-      properties:
-        ok:
-          type: boolean
-          const: true
-        service:
-          type: string
-        readOnly:
-          type: boolean
-        moodleBaseUrlConfigured:
-          type: boolean
-        apiKeyHashSecretConfigured:
-          type: boolean
     MoodleResult:
       type: object
       additionalProperties: true
